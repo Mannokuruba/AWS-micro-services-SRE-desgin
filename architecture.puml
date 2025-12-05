@@ -1,0 +1,104 @@
+@startuml
+title AWS Microservices Architecture - High Level
+skinparam componentStyle rectangle
+
+left to right direction
+
+actor "External User / Client" as User
+
+cloud "Route53 + CloudFront" as CDN
+rectangle "WAF" as WAF
+
+User --> CDN
+CDN --> WAF
+CDN --> WAF
+
+package "VPC" {
+  rectangle "ALB / API Gateway" as ALB
+  rectangle "NAT Gateway" as NAT
+
+  package "Private Subnets" {
+    node "EKS Cluster\n(Kubernetes microservices)" as EKS
+    node "ECS / Fargate\n(Worker jobs / batch)" as ECS
+    node "Lambda (Event handlers)" as Lambda
+
+    database "Amazon Aurora / RDS (Primary)" as RDS
+    database "Aurora Read Replicas" as RDSR
+    storage "DynamoDB (NoSQL)" as DDB
+    queue "SQS (Work queue)" as SQS
+    queue "SNS / EventBridge (Pub/Sub)" as SNS
+    storage "S3 (Assets, Backups, Data Lake)" as S3
+  }
+
+  [ECR (Container Registry)] as ECR
+  [Secrets Manager] as Secrets
+  [KMS (Encryption)] as KMS
+  rectangle "VPC Endpoints\n(S3, DynamoDB, ECR, Secrets Manager)" as Endpoints
+  rectangle "CloudWatch + X-Ray\nLogging, Metrics, Traces" as Observability
+}
+
+'WAF to ALB after ALB is declared'
+WAF --> ALB
+
+' Control plane and CI/CD
+rectangle "CI/CD - GitHub Actions / CodePipeline" as CICD
+rectangle "ArgoCD / Flux (GitOps)" as GitOps
+
+' Connections - external to VPC
+ALB --> EKS : HTTPS
+ALB --> ECS : HTTPS
+ALB --> Lambda : Proxy
+
+' Internal communications
+EKS --> RDS : SQL
+EKS --> DDB : Get/Put
+EKS --> S3 : Get/Put Objects
+EKS --> SQS : Push
+EKS --> SNS : Publish
+ECS --> SQS : Consume
+Lambda --> SNS : Publish/Consume
+
+' Cross-service infra
+EKS --> ECR : Pull images
+ECS --> ECR : Pull images
+CICD --> ECR : Push images
+CICD --> GitOps : Apply manifests
+GitOps --> EKS : Sync
+
+' Security
+EKS --> Secrets : Read secrets (IAM role)
+ECS --> Secrets : Read secrets (IAM role)
+Lambda --> Secrets : Read secrets (IAM role)
+Secrets --> KMS : Decrypt
+
+' Observability
+EKS --> Observability : Metrics, Logs, Traces
+ECS --> Observability : Metrics, Logs, Traces
+Lambda --> Observability : Logs, Traces
+RDS --> Observability : Enhanced monitoring
+
+' Data Flow Examples
+User --> ALB : API requests
+ALB --> EKS : Microservice APIs
+EKS --> SQS : Enqueue long-running jobs
+ECS --> SQS : Process jobs
+SQS --> Lambda : Trigger on message (optional)
+
+legend left
+  || Legend ||
+  | ALB/API Gateway | Edge ingress |
+  | EKS / ECS | Compute (containers) |
+  | RDS / DynamoDB | Persistent storage |
+  | S3 | Object storage |
+  | SQS / SNS / EventBridge | Messaging |
+  | Secrets / KMS | Secrets & encryption |
+  | ECR | Container registry |
+endlegend
+
+note bottom of VPC
+  - VPC split into Public (ALB, NAT) and Private subnets (compute, DB).
+  - Use Security Groups (least privilege) and NACLs for subnets.
+  - Use PrivateLink / VPC Endpoints for S3, DynamoDB, ECR, Secrets Manager to avoid internet egress.
+end note
+
+@enduml

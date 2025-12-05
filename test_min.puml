@@ -1,0 +1,5 @@
+@startuml
+actor User
+rectangle ALB
+User --> ALB
+@enduml

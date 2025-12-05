@@ -1,0 +1,16 @@
+@startuml
+title AWS Microservices Architecture - High Level
+skinparam componentStyle rectangle
+
+left to right direction
+
+actor "External User / Client" as User
+
+cloud "Route53 + CloudFront" as CDN
+rectangle "WAF" as WAF
+
+User --> CDN
+CDN --> WAF
+WAF --> ALB
+
+@enduml

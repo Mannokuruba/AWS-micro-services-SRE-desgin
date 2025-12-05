@@ -1,0 +1,11 @@
+@startuml
+actor User
+cloud "CDN" as CDN
+rectangle WAF
+CDN --> WAF
+WAF --> ALB
+package "VPC" {
+  rectangle "ALB / API Gateway" as ALB
+  rectangle "NAT Gateway" as NAT
+}
+@enduml
